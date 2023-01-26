@@ -22,9 +22,11 @@ namespace WebApiAzureKeyVault
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
-                
-                // TODO: delete following line - demo purposes only
-                //ConfigureAzureKeyVault(builder);
+
+                // ******************************************************************************************************************
+                // ****************************** TODO: delete following line - demo purposes only **********************************
+                // ******************************************************************************************************************
+                ConfigureAzureKeyVault(builder);
             }
             else
             {

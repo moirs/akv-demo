@@ -1,5 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
+using Microsoft.Identity.Client;
 
 namespace WebApiAzureKeyVault
 {
@@ -23,9 +25,7 @@ namespace WebApiAzureKeyVault
                 app.UseSwagger();
                 app.UseSwaggerUI();
 
-                // ******************************************************************************************************************
-                // ****************************** TODO: delete following line - demo purposes only **********************************
-                // ******************************************************************************************************************
+                // Demo only - this line would not be here in the IsDevelopment block it would only be in the else block below
                 ConfigureAzureKeyVault(builder);
             }
             else
@@ -37,50 +37,40 @@ namespace WebApiAzureKeyVault
             app.UseHttpsRedirection();
             app.UseAuthorization();
             app.MapControllers();
-
-            //app.MapGet("/", (IConfiguration config) =>
-            //    string.Join(
-            //        Environment.NewLine,
-            //        "SecretName (Name in Key Vault: 'SecretName')",
-            //        @"Obtained from configuration with config[""SecretName""]",
-            //        $"Value: {config["MSS-SECRET-1"]}",
-            //        "",
-            //        "Section:SecretName (Name in Key Vault: 'Section--SecretName')",
-            //        @"Obtained from configuration with config[""Section:SecretName""]",
-            //        $"Value: {config["Section:SecretName"]}",
-            //        "",
-            //        "Section:SecretName (Name in Key Vault: 'Section--SecretName')",
-            //        @"Obtained from configuration with config.GetSection(""Section"")[""SecretName""]",
-            //        $"Value: {config.GetSection("Section")["SecretName"]}"));
-
             app.Run();
         }
 
         private static void ConfigureAzureKeyVault(WebApplicationBuilder builder)
         {
+            var x509Certificate = GetCertificateFromStoreToAuthenticateWithAzureKeyVault(builder);
+
+            // NOTE: the reload interval allows for AKV values to be refreshed at runtime (typically you would not have this and load secrets once at startup)
+            builder.Configuration.AddAzureKeyVault(
+                new Uri(builder.Configuration["KeyVaultUrl"]),
+                new ClientCertificateCredential(
+                    builder.Configuration["AzureADApplicationId"],
+                    builder.Configuration["AzureADDirectoryId"],
+                    x509Certificate), new AzureKeyVaultConfigurationOptions{ ReloadInterval = TimeSpan.FromSeconds(10)});
+
+            // Managed Identity - this only works when hosted in Azure Service - hence it does not work locally
+            //var identity = new ManagedIdentityCredential(clientId: "c941f324-68da-4f7c-97da-7f0c6489bb35");
+            //var identity = new DefaultAzureCredential();
+            //builder.Configuration.AddAzureKeyVault(new Uri(builder.Configuration["KeyVaultUrl"]), identity);
+        }
+
+        private static X509Certificate2 GetCertificateFromStoreToAuthenticateWithAzureKeyVault(WebApplicationBuilder builder)
+        {
             using var x509Store = new X509Store(StoreLocation.CurrentUser);
 
             x509Store.Open(OpenFlags.ReadOnly);
 
-            var x509Certificate = x509Store.Certificates
+            return x509Store.Certificates
                 .Find(
                     X509FindType.FindByThumbprint,
                     builder.Configuration["AzureADCertThumbprint"],
                     validOnly: false)
                 .OfType<X509Certificate2>()
                 .Single();
-
-            builder.Configuration.AddAzureKeyVault(
-                new Uri(builder.Configuration["KeyVaultUrl"]),
-                new ClientCertificateCredential(
-                    builder.Configuration["AzureADApplicationId"],
-                    builder.Configuration["AzureADDirectoryId"],
-                    x509Certificate));
-
-            // Managed Identity - this only works when hosted in Azure Service - hence it does not work locally
-            //var identity = new ManagedIdentityCredential(clientId: "c941f324-68da-4f7c-97da-7f0c6489bb35");
-            //var identity = new DefaultAzureCredential();
-            //builder.Configuration.AddAzureKeyVault(new Uri(builder.Configuration["KeyVaultUrl"]), identity);
         }
     }
 }
